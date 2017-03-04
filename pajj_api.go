@@ -5,6 +5,7 @@ import (
 	"log"
 	"fmt"
 	"encoding/json"
+	"io/ioutil"
 )
 
 type authorizeRequest struct {
@@ -23,7 +24,8 @@ func main() {
 
 func authorize(w http.ResponseWriter, r *http.Request) {
 	authReq := authorizeRequest{}
-	json.Unmarshal(r.Body, &authReq)
+	jsonText, _ := ioutil.ReadAll(r.Body)
+	json.Unmarshal(jsonText, &authReq)
 	w.WriteHeader(200)
 
 	fmt.Fprintln(w, "Hello browser")
