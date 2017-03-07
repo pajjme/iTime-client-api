@@ -13,10 +13,10 @@ def hello():
     print(request.data)
     if new_user:
         new_user = False
-        return "New User\n"
+        return "1\n"
     else:
         new_user = True
-        return "Existing User\n"
+        return "0\n"
 
 if __name__ == "__main__":
     new_user = True
