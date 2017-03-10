@@ -6,26 +6,53 @@ import (
 	"fmt"
 	"encoding/json"
 	"io/ioutil"
+	"github.com/streadway/amqp"
 )
 
 const ApiVersion string = "/v1"
+const AmqpUrl  = "amqp://guest:guest@localhost:5672/"
+const UrlMapping  = map[string] func(http.ResponseWriter, *http.Request){
+	"/authorize": authorize,
+	"/stats": stats,
+}
 
 type authorizeRequest struct {
 	SessionToken string `json:"session_token"`
 }
 
+func checkError(err error)  {
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 func main() {
 	print("starting server")
 
-	err := http.ListenAndServe(":8118", mainHandler())
-	log.Fatal(err)
-}
+	conn, err := amqp.Dial(AmqpUrl)
+	checkError(err)
+	defer conn.Close()
 
-func mainHandler() http.Handler {
+	channel, err := conn.Channel()
+	checkError(err)
+	defer channel.Close()
+
+
 	mux := http.NewServeMux()
-	mux.HandleFunc(ApiVersion + "/authorize", authorize)
-	mux.HandleFunc(ApiVersion + "/stats", stats)
-	return mux
+	for url, handler := range UrlMapping {
+		queue,err := channel.QueueDeclare(
+			ApiVersion + url,
+			false,
+			false,
+			false,
+			false,
+			nil
+		)
+		// TODO: How do we give a queue to each handler
+		checkError(err)
+		mux.HandleFunc(ApiVersion + url, handler)
+	}
+	err = http.ListenAndServe(":8118", mux)
+	checkError(err)
 }
 
 func authorize(w http.ResponseWriter, r *http.Request) {
