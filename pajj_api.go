@@ -8,11 +8,12 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"github.com/streadway/amqp"
+	"time"
 )
 
 const ApiVersion string = "/v1"
 const AmqpUrl = "amqp://guest:guest@localhost:5672/"
-const UrlMapping = map[string]func(http.ResponseWriter, *http.Request, amqp.Channel){
+const UrlMapping = map[string]func(http.ResponseWriter, *http.Request, *QueueManager){
 	"/authorize": authorize,
 	"/stats": stats,
 }
@@ -39,27 +40,27 @@ func randInt(min int, max int) int {
 	return min + rand.Intn(max - min)
 }
 
-type QueueConsumer struct {
+type QueueManager struct {
 	// TODO: Requests that doesn't get a response fill up getexpectedResponses
 	expectedResponses map[string](<-chan amqp.Delivery)
 	amqpChannel       amqp.Channel
 	amqpQueue         amqp.Queue
 }
 
-func makeQueueConsumer(amqpChannel amqp.Channel) (qc QueueConsumer) {
+func makeQueueManager(amqpChannel amqp.Channel) (qm QueueManager) {
 	// TODO: better to create queue in init function?
 	queue, err := amqpChannel.QueueDeclare("", false, true, true, false, nil)
 	checkError(err)
 
-	qc = QueueConsumer{make(map[string]struct{}), amqpChannel, queue}
+	qm = QueueManager{make(map[string]struct{}), amqpChannel, queue}
 
 	// Wait for incoming AMQP messages, then forward the body to the requester
 	consumer, err := amqpChannel.Consume(queue.Name, "", false, true, false, false, nil)
 	checkError(err)
 	go func() {
 		for msg := range consumer {
-			answered, ok := qc.expectedResponses[msg.CorrelationId]
-			defer delete(qc.expectedResponses, msg.CorrelationId)
+			answered, ok := qm.expectedResponses[msg.CorrelationId]
+			defer delete(qm.expectedResponses, msg.CorrelationId)
 
 			if !ok {
 				// TODO: use logger instead
@@ -72,20 +73,20 @@ func makeQueueConsumer(amqpChannel amqp.Channel) (qc QueueConsumer) {
 	}()
 }
 
-func (qc QueueConsumer) sendRequest(endpoint string, body string) <-chan amqp.Delivery {
+func (qm QueueManager) sendRequest(endpoint string, body string) <-chan amqp.Delivery {
 	corrId := randomString(32)
 	respondChannel := make(<-chan amqp.Delivery)
 
-	qc.expectedResponses[qc.amqpQueue.Name] = respondChannel
+	qm.expectedResponses[qm.amqpQueue.Name] = respondChannel
 
-	err := qc.amqpChannel.Publish("", endpoint, true, true, amqp.Publishing{
+	err := qm.amqpChannel.Publish("", endpoint, true, true, amqp.Publishing{
 		ContentType: "application/json",
 		CorrelationId: corrId,
-		ReplyTo: qc.amqpQueue.Name,
+		ReplyTo: qm.amqpQueue.Name,
 		Body: body,
 	})
 	if err {
-		delete(qc.expectedResponses, qc.amqpQueue.Name)
+		delete(qm.expectedResponses, qm.amqpQueue.Name)
 		checkError(err)
 	}
 }
@@ -108,12 +109,14 @@ func main() {
 	checkError(err)
 	defer channel.Close()
 
+	qm := makeQueueManager(channel)
+
 	// Bind each handler to channel and an endpoint
 	mux := http.NewServeMux()
 	for url, handler := range UrlMapping {
 		mux.HandleFunc(ApiVersion + url, func(w http.ResponseWriter, r *http.Request) {
 			// TODO: Make sure AMQP-connection works, ex reconnect
-			handler(w, r, channel)
+			handler(w, r, &qm)
 		})
 	}
 
@@ -121,14 +124,26 @@ func main() {
 	checkError(err)
 }
 
-func authorize(w http.ResponseWriter, r *http.Request, channel amqp.Channel) {
+func authorize(w http.ResponseWriter, r *http.Request, qm *QueueManager) {
 	authReq := authorizeRequest{}
 	jsonText, _ := ioutil.ReadAll(r.Body)
-	json.Unmarshal(jsonText, &authReq)
+	err := json.Unmarshal(jsonText, &authReq)
+	checkError(err)
+
+
+	amqpResponse := <- qm.sendRequest("authorize", json.Marshal(jsonText))
+
+	// TODO: Use data from amqpResponse to send to client
 
 	w.WriteHeader(200)
 
-	fmt.Fprintln(w, "Hello browser")
+	http.SetCookie(w, http.Cookie{
+		Name: "sessionToken",
+		Value:,
+		Expires: time.Now().AddDate(1, 0, 0), // One year ahead
+	})
+
+	fmt.Fprintln(w, "{}")
 }
 
 func stats(w http.ResponseWriter, r *http.Request) {
