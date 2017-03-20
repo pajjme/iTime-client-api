@@ -13,13 +13,13 @@ import (
 
 const ApiVersion string = "/v1"
 const AmqpUrl = "amqp://guest:guest@localhost:5672/"
-const UrlMapping = map[string]func(http.ResponseWriter, *http.Request, *QueueManager){
+var UrlMapping = map[string]func(http.ResponseWriter, *http.Request, *QueueManager){
 	"/authorize": authorize,
 	"/stats": stats,
 }
 
 type authorizeRequest struct {
-	SessionToken string `json:"session_token"`
+	AuthCode string `json:"auth_code"`
 }
 
 func checkError(err error) {
@@ -42,7 +42,7 @@ func randInt(min int, max int) int {
 
 type QueueManager struct {
 	// TODO: Requests that doesn't get a response fill up getexpectedResponses
-	expectedResponses map[string](<-chan amqp.Delivery)
+	expectedResponses map[string](chan []byte)
 	amqpChannel       amqp.Channel
 	amqpQueue         amqp.Queue
 }
@@ -52,7 +52,7 @@ func makeQueueManager(amqpChannel amqp.Channel) (qm QueueManager) {
 	queue, err := amqpChannel.QueueDeclare("", false, true, true, false, nil)
 	checkError(err)
 
-	qm = QueueManager{make(map[string]struct{}), amqpChannel, queue}
+	qm = QueueManager{make(map[string]chan[]byte), amqpChannel, queue}
 
 	// Wait for incoming AMQP messages, then forward the body to the requester
 	consumer, err := amqpChannel.Consume(queue.Name, "", false, true, false, false, nil)
@@ -71,11 +71,12 @@ func makeQueueManager(amqpChannel amqp.Channel) (qm QueueManager) {
 			answered <- msg.Body
 		}
 	}()
+	return
 }
 
-func (qm QueueManager) sendRequest(endpoint string, body string) <-chan amqp.Delivery {
+func (qm QueueManager) sendRequest(endpoint string, body []byte) chan []byte{
 	corrId := randomString(32)
-	respondChannel := make(<-chan amqp.Delivery)
+	respondChannel := make(chan []byte)
 
 	qm.expectedResponses[qm.amqpQueue.Name] = respondChannel
 
@@ -85,18 +86,13 @@ func (qm QueueManager) sendRequest(endpoint string, body string) <-chan amqp.Del
 		ReplyTo: qm.amqpQueue.Name,
 		Body: body,
 	})
-	if err {
+	if err != nil{
 		delete(qm.expectedResponses, qm.amqpQueue.Name)
 		checkError(err)
 	}
+	return respondChannel
 }
 
-func callRPC(endpoint string, channel amqp.Channel) []byte {
-	cons, err := channel.Consume(endpoint, "", true, false, false, false, nil)
-	checkError(err)
-
-	err := channel.Publish("", endpoint)
-}
 
 func main() {
 	print("starting server")
@@ -104,12 +100,12 @@ func main() {
 	conn, err := amqp.Dial(AmqpUrl)
 	checkError(err)
 	defer conn.Close()
-
+	print("hello")
 	channel, err := conn.Channel()
 	checkError(err)
 	defer channel.Close()
 
-	qm := makeQueueManager(channel)
+	qm := makeQueueManager(*channel)
 
 	// Bind each handler to channel and an endpoint
 	mux := http.NewServeMux()
@@ -131,22 +127,25 @@ func authorize(w http.ResponseWriter, r *http.Request, qm *QueueManager) {
 	checkError(err)
 
 
-	amqpResponse := <- qm.sendRequest("authorize", json.Marshal(jsonText))
+	rpcRequest,err := json.Marshal(jsonText) 
+	amqpResponse := <- qm.sendRequest("authorize", rpcRequest)
+	
+
 
 	// TODO: Use data from amqpResponse to send to client
 
 	w.WriteHeader(200)
 
-	http.SetCookie(w, http.Cookie{
+	http.SetCookie(w, &http.Cookie{
 		Name: "sessionToken",
-		Value:,
+		Value: "",
 		Expires: time.Now().AddDate(1, 0, 0), // One year ahead
 	})
 
-	fmt.Fprintln(w, "{}")
+	fmt.Fprintln(w,amqpResponse)
 }
 
-func stats(w http.ResponseWriter, r *http.Request) {
+func stats(w http.ResponseWriter, r *http.Request,qm *QueueManager) {
 	params := r.URL.Query()
 	from, ok1 := params["from"]
 	to, ok2 := params["to"]
