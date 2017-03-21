@@ -106,8 +106,14 @@ func main() {
 	mux := http.NewServeMux()
 
 	// TODO: Make sure AMQP-connection works, ex reconnect
-	mux.HandleFunc(ApiVersion+"/authorize", func(w http.ResponseWriter, r *http.Request) { authorize(w, r, &qm) })
-	mux.HandleFunc(ApiVersion+"/stats", func(w http.ResponseWriter, r *http.Request) { stats(w, r, &qm) })
+	mux.HandleFunc(ApiVersion+"/authorize", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		authorize(w, r, &qm)
+	})
+	mux.HandleFunc(ApiVersion+"/stats", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		stats(w, r, &qm)
+	})
 
 	err = http.ListenAndServe(":8118", mux)
 	checkError(err)
