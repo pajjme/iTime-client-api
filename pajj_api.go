@@ -74,7 +74,7 @@ func (qm QueueManager) sendRequest(endpoint string, body []byte) chan []byte{
 	corrId := randomString(32)
 	respondChannel := make(chan []byte)
 
-	qm.expectedResponses[qm.amqpQueue.Name] = respondChannel
+	qm.expectedResponses[corrId] = respondChannel
 
 	println("endpoint" + endpoint)
 	err := qm.amqpChannel.Publish("", endpoint, true, true, amqp.Publishing{
