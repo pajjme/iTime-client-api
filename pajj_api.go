@@ -13,10 +13,6 @@ import (
 
 const ApiVersion string = "/v1"
 const AmqpUrl = "amqp://guest:guest@localhost:5672/"
-var UrlMapping = map[string]func(http.ResponseWriter, *http.Request, *QueueManager){
-	"/authorize": authorize,
-	"/stats": stats,
-}
 
 type authorizeRequest struct {
 	AuthCode string `json:"auth_code"`
@@ -80,6 +76,7 @@ func (qm QueueManager) sendRequest(endpoint string, body []byte) chan []byte{
 
 	qm.expectedResponses[qm.amqpQueue.Name] = respondChannel
 
+	println("endpoint" + endpoint)
 	err := qm.amqpChannel.Publish("", endpoint, true, true, amqp.Publishing{
 		ContentType: "application/json",
 		CorrelationId: corrId,
@@ -109,18 +106,17 @@ func main() {
 
 	// Bind each handler to channel and an endpoint
 	mux := http.NewServeMux()
-	for url, handler := range UrlMapping {
-		mux.HandleFunc(ApiVersion + url, func(w http.ResponseWriter, r *http.Request) {
-			// TODO: Make sure AMQP-connection works, ex reconnect
-			handler(w, r, &qm)
-		})
-	}
+
+	// TODO: Make sure AMQP-connection works, ex reconnect
+	mux.HandleFunc(ApiVersion+"/authorize", func(w http.ResponseWriter, r *http.Request){authorize(w, r, &qm)})
+	mux.HandleFunc(ApiVersion+"/stats", func(w http.ResponseWriter, r *http.Request){stats(w, r, &qm)})
 
 	err = http.ListenAndServe(":8118", mux)
 	checkError(err)
 }
 
 func authorize(w http.ResponseWriter, r *http.Request, qm *QueueManager) {
+	println("fffg")
 	authReq := authorizeRequest{}
 	jsonText, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(jsonText, &authReq)
@@ -146,6 +142,7 @@ func authorize(w http.ResponseWriter, r *http.Request, qm *QueueManager) {
 }
 
 func stats(w http.ResponseWriter, r *http.Request,qm *QueueManager) {
+	println("stttta")
 	params := r.URL.Query()
 	from, ok1 := params["from"]
 	to, ok2 := params["to"]
@@ -158,4 +155,9 @@ func stats(w http.ResponseWriter, r *http.Request,qm *QueueManager) {
 
 	// TODO:  send RPC call, and respond on HTTP request
 	fmt.Fprintln(w, "{}")
+}
+
+
+func abc(w http.ResponseWriter, r *http.Request,qm *QueueManager) {
+	println(" ABC")
 }
