@@ -76,9 +76,9 @@ func (qm QueueManager) sendRequest(endpoint string, body []byte) chan []byte{
 
 	qm.expectedResponses[corrId] = respondChannel
 
-	println("endpoint" + endpoint)
 	err := qm.amqpChannel.Publish("", endpoint, true, true, amqp.Publishing{
 		ContentType: "application/json",
+	log.Println("endpoint " + endpoint)
 		CorrelationId: corrId,
 		ReplyTo: qm.amqpQueue.Name,
 		Body: body,
@@ -97,7 +97,6 @@ func main() {
 	conn, err := amqp.Dial(AmqpUrl)
 	checkError(err)
 	defer conn.Close()
-	print("hello")
 	channel, err := conn.Channel()
 	checkError(err)
 	defer channel.Close()
@@ -116,7 +115,6 @@ func main() {
 }
 
 func authorize(w http.ResponseWriter, r *http.Request, qm *QueueManager) {
-	println("fffg")
 	authReq := authorizeRequest{}
 	jsonText, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(jsonText, &authReq)
