@@ -139,7 +139,7 @@ func authorize(w http.ResponseWriter, r *http.Request, qm *QueueManager) {
 		Expires: time.Now().AddDate(1, 0, 0), // One year ahead
 	})
 
-	fmt.Fprintln(w,amqpResponse)
+	fmt.Fprintln(w, string(amqpResponse))
 }
 
 func stats(w http.ResponseWriter, r *http.Request,qm *QueueManager) {
