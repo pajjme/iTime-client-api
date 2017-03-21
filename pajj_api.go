@@ -127,6 +127,9 @@ func authorize(w http.ResponseWriter, r *http.Request, qm *QueueManager) {
 	amqpResponse := <- qm.sendRequest("authorize", rpcRequest)
 	
 
+	log.Println("Send request to US",authReq)
+	rpcRequest, err := json.Marshal(jsonText)
+	amqpResponse := <-qm.sendRequest("authorize", rpcRequest)
 
 	// TODO: Use data from amqpResponse to send to client
 
