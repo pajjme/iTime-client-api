@@ -125,7 +125,7 @@ func authorize(w http.ResponseWriter, r *http.Request, qm *QueueManager) {
 	err := json.Unmarshal(jsonText, &authReq)
 	checkError(err)
 
-	log.Println("Send request to US",authReq)
+	log.Println("Send request to US", authReq)
 	rpcRequest, err := json.Marshal(jsonText)
 	amqpResponse := <-qm.sendRequest("authorize", rpcRequest)
 
