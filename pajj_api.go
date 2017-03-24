@@ -26,15 +26,19 @@ func randomString(length int) string {
 		return min + rand.Intn(max-min)
 	}
 
-	bytes := make([]byte, l)
+	bytes := make([]byte, length)
 	for i := 0; i < length; i++ {
 		bytes[i] = byte(randInt(65, 90))
 	}
 	return string(bytes)
 }
 
+type RPCaller interface {
+	sendRequest(method string, body []byte) chan []byte
+}
+
 // Structure for kepping track of requests and responses to AMQP.
-type QueueManager struct {
+type AmqpRPC struct {
 	// TODO: Requests that doesn't get a response fill up getexpectedResponses
 	expectedResponses map[string](chan []byte)
 	amqpChannel       amqp.Channel
@@ -44,12 +48,12 @@ type QueueManager struct {
 // Makes a QueueManager from a AMQP manager. 
 // Starts a goroutine that redirects responses to corresponding
 // gochannel so it can be used by the goroutines
-func makeQueueManager(amqpChannel amqp.Channel) (qm QueueManager) {
+func makeQueueManager(amqpChannel amqp.Channel) (qm AmqpRPC) {
 	// TODO: better to create queue in init function?
 	queue, err := amqpChannel.QueueDeclare("", false, true, true, false, nil)
 	checkError(err)
 
-	qm = QueueManager{make(map[string]chan []byte), amqpChannel, queue}
+	qm = AmqpRPC{make(map[string]chan []byte), amqpChannel, queue}
 
 	// Wait for incoming AMQP messages, then forward the body to the requester
 	consumer, err := amqpChannel.Consume(queue.Name, "", false, true, false, false, nil)
@@ -72,15 +76,15 @@ func makeQueueManager(amqpChannel amqp.Channel) (qm QueueManager) {
 }
 
 // Adds an entry in the QueueManager for a request and returns the gochannel.
-func (qm QueueManager) sendRequest(endpoint string, body []byte) chan []byte {
+func (qm AmqpRPC) sendRequest(method string, body []byte) chan []byte {
 	//ish uuid
 	corrId := randomString(32)
 	respondChannel := make(chan []byte)
 
 	qm.expectedResponses[corrId] = respondChannel
 
-	log.Println("endpoint " + endpoint)
-	err := qm.amqpChannel.Publish("", endpoint, false, false,
+	log.Println("endpoint " + method)
+	err := qm.amqpChannel.Publish("", method, false, false,
 		amqp.Publishing{
 			ContentType:   "application/json",
 			CorrelationId: corrId,
@@ -114,12 +118,12 @@ func main() {
 	mux.HandleFunc(ApiVersion+"/authorize",
 		func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
-			authorize(w, r, &qm)
+			authorize(w, r, qm)
 		},
 	)
 	mux.HandleFunc(ApiVersion+"/stats", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		stats(w, r, &qm)
+		stats(w, r, qm)
 	})
 
 	err = http.ListenAndServe(":8118", mux)
@@ -131,17 +135,17 @@ type authorizeRequest struct {
 	AuthCode string `json:"auth_code"`
 }
 
-func authorize(w http.ResponseWriter, r *http.Request, qm *QueueManager) {
+func authorize(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
 	authReq := authorizeRequest{}
 	jsonText, _ := ioutil.ReadAll(r.Body)
 	err := json.Unmarshal(jsonText, &authReq)
 	checkError(err)
 
 
-	
+
 	log.Println("Send request to US", authReq)
 	rpcRequest, err := json.Marshal(authReq)
-	amqpResponse := <-qm.sendRequest("authorize", rpcRequest)
+	amqpResponse := <- rpc.sendRequest("authorize", rpcRequest)
 
 	// TODO: Use data from amqpResponse to send to client
 
@@ -157,7 +161,7 @@ func authorize(w http.ResponseWriter, r *http.Request, qm *QueueManager) {
 	fmt.Fprintln(w, string(amqpResponse))
 }
 
-func stats(w http.ResponseWriter, r *http.Request, qm *QueueManager) {
+func stats(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
 	println("stttta")
 	params := r.URL.Query()
 	from, ok1 := params["from"]
