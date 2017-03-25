@@ -1,4 +1,4 @@
-package main
+package apiutil
 
 import (
 	"math/rand"
@@ -8,14 +8,14 @@ import (
 	"reflect"
 )
 
-func checkError(err error) {
+func CheckError(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
 // Substitute for UUID. Will be replaced.
-func randomString(length int) string {
+func RandomString(length int) string {
 	randInt := func(min int, max int) int {
 		return min + rand.Intn(max - min)
 	}
@@ -27,6 +27,8 @@ func randomString(length int) string {
 	return string(bytes)
 }
 
+
+// Source: https://gist.github.com/turtlemonvh/e4f7404e28387fadb8ad275a99596f67
 func AreEqualJSON(s1, s2 string) (bool, error) {
 	var o1 interface{}
 	var o2 interface{}

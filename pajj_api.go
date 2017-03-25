@@ -1,154 +1,38 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
+	"github.com/pajjme/iTime-client-api/apiutil"
 	"github.com/streadway/amqp"
-	"io/ioutil"
-	"log"
-	"math/rand"
 	"net/http"
-	"time"
 )
 
 const ApiVersion = "/v1"
 const AmqpUrl = "amqp://guest:guest@localhost:5672/"
 
-type RPCaller interface {
-	SendRequest(method string, body []byte) chan []byte
-}
-
-// Structure for kepping track of requests and responses to AMQP.
-type AmqpRPC struct {
-	// TODO: Requests that doesn't get a response fill up getexpectedResponses
-	expectedResponses map[string](chan []byte)
-	amqpChannel       amqp.Channel
-	amqpQueue         amqp.Queue
-}
-
-// Makes a QueueManager from a AMQP manager. 
-// Starts a goroutine that redirects responses to corresponding
-// gochannel so it can be used by the goroutines
-func makeQueueManager(amqpChannel amqp.Channel) (qm AmqpRPC) {
-	// TODO: better to create queue in init function?
-	queue, err := amqpChannel.QueueDeclare("", false, true, true, false, nil)
-	checkError(err)
-
-	qm = AmqpRPC{make(map[string]chan []byte), amqpChannel, queue}
-
-	// Wait for incoming AMQP messages, then forward the body to the requester
-	consumer, err := amqpChannel.Consume(queue.Name, "", false, true, false, false, nil)
-	checkError(err)
-	go func() {
-		for msg := range consumer {
-			answered, ok := qm.expectedResponses[msg.CorrelationId]
-
-			if !ok {
-				// TODO: use logger instead
-				println("Warning: Got response without expecting correlation ID '" + msg.CorrelationId + "'. ")
-				continue
-			}
-
-			answered <- msg.Body
-			delete(qm.expectedResponses, msg.CorrelationId)
-		}
-	}()
-	return
-}
-
-// Adds an entry in the QueueManager for a request and returns the gochannel.
-func (qm AmqpRPC) SendRequest(method string, body []byte) chan []byte {
-	//ish uuid
-	corrId := randomString(32)
-	respondChannel := make(chan []byte)
-
-	qm.expectedResponses[corrId] = respondChannel
-
-	log.Println("endpoint " + method)
-	err := qm.amqpChannel.Publish("", method, false, false,
-		amqp.Publishing{
-			ContentType:   "application/json",
-			CorrelationId: corrId,
-			ReplyTo:       qm.amqpQueue.Name,
-			Body:          body,
-		},
-	)
-	if err != nil {
-		delete(qm.expectedResponses, qm.amqpQueue.Name)
-		checkError(err)
-	}
-	return respondChannel
-}
-
 func main() {
 	print("starting server")
 
 	conn, err := amqp.Dial(AmqpUrl)
-	checkError(err)
+	apiutil.CheckError(err)
 	defer conn.Close()
 
 	channel, err := conn.Channel()
-	checkError(err)
+	apiutil.CheckError(err)
 	defer channel.Close()
 
-	qm := makeQueueManager(*channel)
+	qm := apiutil.MakeAmqpRPC(*channel)
 
 	// Bind each handler to channel and an endpoint
 	mux := http.NewServeMux()
 
 	// TODO: Make sure AMQP-connection works, ex reconnect
-	mux.HandleFunc(ApiVersion + "/authorize", func(w http.ResponseWriter, r *http.Request) {
-		authorize(w, r, qm)
+	mux.HandleFunc(ApiVersion+"/authorize", func(w http.ResponseWriter, r *http.Request) {
+		apiutil.Authorize(w, r, qm)
 	})
-	mux.HandleFunc(ApiVersion + "/stats", func(w http.ResponseWriter, r *http.Request) {
-		stats(w, r, qm)
+	mux.HandleFunc(ApiVersion+"/stats", func(w http.ResponseWriter, r *http.Request) {
+		apiutil.Stats(w, r, qm)
 	})
 
 	err = http.ListenAndServe(":8118", mux)
-	checkError(err)
-}
-
-type authorizeRequest struct {
-	AuthCode string `json:"auth_code"`
-}
-
-func authorize(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
-	authReq := authorizeRequest{}
-	jsonText, _ := ioutil.ReadAll(r.Body)
-	err := json.Unmarshal(jsonText, &authReq)
-	checkError(err)
-
-	log.Println("Send request to US", authReq)
-	rpcRequest, err := json.Marshal(authReq)
-	amqpResponse := <-rpc.SendRequest("authorize", rpcRequest)
-
-	// TODO: Use data from amqpResponse to send to client
-
-	w.WriteHeader(200) // HTTP Found
-
-	http.SetCookie(w, &http.Cookie{
-		Name:    "sessionToken",
-		Value:   "",
-		Expires: time.Now().AddDate(1, 0, 0), // One year ahead
-	})
-
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	fmt.Fprintln(w, string(amqpResponse))
-}
-
-func stats(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
-	println("stttta")
-	params := r.URL.Query()
-	from, ok1 := params["from"]
-	to, ok2 := params["to"]
-
-	if !ok1 || !ok2 {
-		w.WriteHeader(400) // Bad Request
-		return
-	}
-	_, _ = from, to
-
-	// TODO:  send RPC call, and respond on HTTP request
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	fmt.Fprintln(w, "{}")
+	apiutil.CheckError(err)
 }
