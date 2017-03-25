@@ -14,25 +14,6 @@ import (
 const ApiVersion = "/v1"
 const AmqpUrl = "amqp://guest:guest@localhost:5672/"
 
-func checkError(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-// Substitute for UUID. Will be replaced.
-func randomString(length int) string {
-	randInt := func(min int, max int) int {
-		return min + rand.Intn(max - min)
-	}
-
-	bytes := make([]byte, length)
-	for i := 0; i < length; i++ {
-		bytes[i] = byte(randInt(65, 90))
-	}
-	return string(bytes)
-}
-
 type RPCaller interface {
 	SendRequest(method string, body []byte) chan []byte
 }
