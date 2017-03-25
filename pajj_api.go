@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const ApiVersion string = "/v1"
+const ApiVersion = "/v1"
 const AmqpUrl = "amqp://guest:guest@localhost:5672/"
 
 func checkError(err error) {
@@ -23,7 +23,7 @@ func checkError(err error) {
 // Substitute for UUID. Will be replaced.
 func randomString(length int) string {
 	randInt := func(min int, max int) int {
-		return min + rand.Intn(max-min)
+		return min + rand.Intn(max - min)
 	}
 
 	bytes := make([]byte, length)
@@ -34,7 +34,7 @@ func randomString(length int) string {
 }
 
 type RPCaller interface {
-	sendRequest(method string, body []byte) chan []byte
+	SendRequest(method string, body []byte) chan []byte
 }
 
 // Structure for kepping track of requests and responses to AMQP.
@@ -76,7 +76,7 @@ func makeQueueManager(amqpChannel amqp.Channel) (qm AmqpRPC) {
 }
 
 // Adds an entry in the QueueManager for a request and returns the gochannel.
-func (qm AmqpRPC) sendRequest(method string, body []byte) chan []byte {
+func (qm AmqpRPC) SendRequest(method string, body []byte) chan []byte {
 	//ish uuid
 	corrId := randomString(32)
 	respondChannel := make(chan []byte)
@@ -105,6 +105,7 @@ func main() {
 	conn, err := amqp.Dial(AmqpUrl)
 	checkError(err)
 	defer conn.Close()
+
 	channel, err := conn.Channel()
 	checkError(err)
 	defer channel.Close()
@@ -115,14 +116,10 @@ func main() {
 	mux := http.NewServeMux()
 
 	// TODO: Make sure AMQP-connection works, ex reconnect
-	mux.HandleFunc(ApiVersion+"/authorize",
-		func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			authorize(w, r, qm)
-		},
-	)
-	mux.HandleFunc(ApiVersion+"/stats", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+	mux.HandleFunc(ApiVersion + "/authorize", func(w http.ResponseWriter, r *http.Request) {
+		authorize(w, r, qm)
+	})
+	mux.HandleFunc(ApiVersion + "/stats", func(w http.ResponseWriter, r *http.Request) {
 		stats(w, r, qm)
 	})
 
@@ -131,7 +128,6 @@ func main() {
 }
 
 type authorizeRequest struct {
-	// Makes it possible to Marshal the struct to json.
 	AuthCode string `json:"auth_code"`
 }
 
@@ -141,16 +137,13 @@ func authorize(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
 	err := json.Unmarshal(jsonText, &authReq)
 	checkError(err)
 
-
-
 	log.Println("Send request to US", authReq)
 	rpcRequest, err := json.Marshal(authReq)
-	amqpResponse := <- rpc.sendRequest("authorize", rpcRequest)
+	amqpResponse := <-rpc.SendRequest("authorize", rpcRequest)
 
 	// TODO: Use data from amqpResponse to send to client
 
-	//HTTP Response: Found
-	w.WriteHeader(200)
+	w.WriteHeader(200) // HTTP Found
 
 	http.SetCookie(w, &http.Cookie{
 		Name:    "sessionToken",
@@ -158,6 +151,7 @@ func authorize(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
 		Expires: time.Now().AddDate(1, 0, 0), // One year ahead
 	})
 
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	fmt.Fprintln(w, string(amqpResponse))
 }
 
@@ -174,5 +168,6 @@ func stats(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
 	_, _ = from, to
 
 	// TODO:  send RPC call, and respond on HTTP request
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	fmt.Fprintln(w, "{}")
 }
