@@ -26,7 +26,7 @@ func randomString(length int) string {
 		return min + rand.Intn(max-min)
 	}
 
-	bytes := make([]byte, l)
+	bytes := make([]byte, length)
 	for i := 0; i < length; i++ {
 		bytes[i] = byte(randInt(65, 90))
 	}
