@@ -98,7 +98,6 @@ func (qm QueueManager) sendRequest(endpoint string, body []byte) chan []byte {
 func main() {
 	
 	log.Println("Starting the server")
-	test := 1
 	conn, err := amqp.Dial(AmqpUrl)
 	checkError(err)
 	defer conn.Close()
