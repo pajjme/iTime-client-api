@@ -33,6 +33,7 @@ func Authorize(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
 		Expires: time.Now().AddDate(1, 0, 0), // One year ahead
 	})
 
+	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	fmt.Fprintln(w, string(amqpResponse))
 }
@@ -45,12 +46,13 @@ func Stats(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
 
 	if !ok1 || !ok2 {
 		w.WriteHeader(400) // Bad Request
-		fmt.Fprintln(w, `{"error":"1"}`)
+		fmt.Fprintln(w, `{"error": "Need to specify from and to URL parameters"}`)
 		return
 	}
 	_, _, _ = from, to, rpc
 
 	// TODO:  send RPC call, and respond on HTTP request
+	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	fmt.Fprintln(w, `{ piechart: { labels: ["Schoolwork","Netflix and chill"], data: [300,50] }, last: true, first: true, total: 350 }`)
 }
