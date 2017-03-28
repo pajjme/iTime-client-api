@@ -2,7 +2,6 @@ package apiutil
 
 import (
 	"math/rand"
-	"log"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -10,7 +9,7 @@ import (
 
 func CheckError(err error) {
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 }
 
@@ -29,19 +28,21 @@ func RandomString(length int) string {
 
 
 // Source: https://gist.github.com/turtlemonvh/e4f7404e28387fadb8ad275a99596f67
-func AreEqualJSON(s1, s2 string) (bool, error) {
+func AssertEqualJSON(s1, s2 string) {
 	var o1 interface{}
 	var o2 interface{}
 
 	var err error
 	err = json.Unmarshal([]byte(s1), &o1)
 	if err != nil {
-		return false, fmt.Errorf("Error mashalling string 1 :: %s", err.Error())
+		panic("Error mashalling string 1 :: "+ err.Error())
 	}
 	err = json.Unmarshal([]byte(s2), &o2)
 	if err != nil {
-		return false, fmt.Errorf("Error mashalling string 2 :: %s", err.Error())
+		panic("Error mashalling string 2 :: %s"+ err.Error())
 	}
 
-	return reflect.DeepEqual(o1, o2), nil
+	if !reflect.DeepEqual(o1, o2) {
+		panic(fmt.Sprintf("JSON not equal: %s vs %s", s1, s2))
+	}
 }
