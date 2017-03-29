@@ -26,7 +26,7 @@ func randomString(length int) string {
 		return min + rand.Intn(max-min)
 	}
 
-	bytes := make([]byte, l)
+	bytes := make([]byte, length)
 	for i := 0; i < length; i++ {
 		bytes[i] = byte(randInt(65, 90))
 	}
@@ -142,7 +142,7 @@ func authorize(w http.ResponseWriter, r *http.Request, qm *QueueManager) {
 	log.Println("Send request to US", authReq)
 	rpcRequest, err := json.Marshal(authReq)
 	amqpResponse := <-qm.sendRequest("authorize", rpcRequest)
-
+	log.Println("Response from US was:",string(amqpResponse))
 	// TODO: Use data from amqpResponse to send to client
 
 	//HTTP Response: Found
