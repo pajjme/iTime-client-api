@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/pajjme/iTime-client-api/apiutil"
+	"github.com/pajjme/iTime-client-api/api"
 	"github.com/streadway/amqp"
 	"net/http"
 )
@@ -13,26 +13,26 @@ func main() {
 	print("starting server")
 
 	conn, err := amqp.Dial(AmqpUrl)
-	apiutil.CheckError(err)
+	api.CheckError(err)
 	defer conn.Close()
 
 	channel, err := conn.Channel()
-	apiutil.CheckError(err)
+	api.CheckError(err)
 	defer channel.Close()
 
-	qm := apiutil.MakeAmqpRPC(*channel)
+	qm := api.MakeAmqpRPC(*channel)
 
 	// Bind each handler to channel and an endpoint
 	mux := http.NewServeMux()
 
 	// TODO: Make sure AMQP-connection works, ex reconnect
 	mux.HandleFunc(ApiVersion+"/authorize", func(w http.ResponseWriter, r *http.Request) {
-		apiutil.Authorize(w, r, qm)
+		api.Authorize(w, r, qm)
 	})
 	mux.HandleFunc(ApiVersion+"/stats", func(w http.ResponseWriter, r *http.Request) {
-		apiutil.Stats(w, r, qm)
+		api.Stats(w, r, qm)
 	})
 
 	err = http.ListenAndServe(":8118", mux)
-	apiutil.CheckError(err)
+	api.CheckError(err)
 }
