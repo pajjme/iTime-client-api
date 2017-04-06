@@ -85,7 +85,6 @@ func Authorize(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
 }
 
 func Stats(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
-	println("stttta")
 	params := r.URL.Query()
 	from, ok1 := params["from"]
 	to, ok2 := params["to"]

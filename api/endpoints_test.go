@@ -13,7 +13,7 @@ type RPCMock struct {
 }
 
 func (mock RPCMock) SendRequest(method string, body []byte) chan []byte {
-	AssertEqualJSON(mock.amqpReq, string(body))
+	assert.JSONEq(mock.t, mock.amqpReq, string(body))
 
 	response := make(chan []byte, 1)
 	response <- []byte(mock.amqpRes)

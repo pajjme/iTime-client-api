@@ -9,7 +9,6 @@ type RPCaller interface {
 	SendRequest(method string, body []byte) chan []byte
 }
 
-// Structure for kepping track of requests and responses to AMQP.
 type AmqpRPC struct {
 	// TODO: Requests that doesn't get a response fill up getexpectedResponses
 	expectedResponses map[string](chan []byte)
@@ -17,9 +16,8 @@ type AmqpRPC struct {
 	amqpQueue         amqp.Queue
 }
 
-// Makes a QueueManager from a AMQP manager.
-// Starts a goroutine that redirects responses to corresponding
-// gochannel so it can be used by the goroutines
+// Starts a go routine that redirects AMQP responses to corresponding
+// go channel in expectedResponses
 func MakeAmqpRPC(amqpChannel amqp.Channel) (qm AmqpRPC) {
 	// TODO: better to create queue in init function?
 	queue, err := amqpChannel.QueueDeclare("", false, true, true, false, nil)
@@ -34,8 +32,7 @@ func MakeAmqpRPC(amqpChannel amqp.Channel) (qm AmqpRPC) {
 			answered, ok := qm.expectedResponses[msg.CorrelationId]
 
 			if !ok {
-				// TODO: use logger instead
-				println("Warning: Got response without expecting correlation ID '" + msg.CorrelationId + "'. ")
+				log.Printf("Warning: Got response without expecting correlation ID '%s'.", msg.CorrelationId)
 				continue
 			}
 
@@ -46,15 +43,11 @@ func MakeAmqpRPC(amqpChannel amqp.Channel) (qm AmqpRPC) {
 	return
 }
 
-// Adds an entry in the QueueManager for a request and returns the gochannel.
 func (qm AmqpRPC) SendRequest(method string, body []byte) chan []byte {
-	//ish uuid
 	corrId := RandomString(32)
 	respondChannel := make(chan []byte)
-
 	qm.expectedResponses[corrId] = respondChannel
 
-	log.Println("endpoint " + method)
 	err := qm.amqpChannel.Publish("", method, false, false,
 		amqp.Publishing{
 			ContentType:   "application/json",
