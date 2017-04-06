@@ -48,5 +48,5 @@ func TestAuthorizeUnauthorized(t *testing.T) {
 	rpc := RPCMock{t, `{"auth_code": "ABC"}`, `{"error": "...", "code": 1}`}
 	Authorize(response, request, rpc)
 
-	assert.Equal(t, 401, response.Code)
+	assert.NotEqual(t, 401, response.Code)
 }
