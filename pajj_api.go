@@ -12,7 +12,7 @@ import (
 )
 
 const ApiVersion string = "/v1"
-const AmqpUrl = "amqp://guest:guest@localhost:5672/"
+const AmqpUrl = "amqp://guest:guest@rabbit-service:5672/"
 
 func checkError(err error) {
 	if err != nil {
