@@ -50,3 +50,13 @@ func TestAuthorizeUnauthorized(t *testing.T) {
 
 	assert.Equal(t, 401, response.Code)
 }
+
+func TestAuthorizeInternalServerError(t *testing.T) {
+	request := httptest.NewRequest("POST", "/v1/authorize",
+		strings.NewReader(`{"auth_code": "ABC"}`))
+	response := httptest.NewRecorder()
+	rpc := RPCMock{t, `{"auth_code": "ABC"}`, `{"error": "...", "code": 2}`}
+	Authorize(response, request, rpc)
+
+	assert.Equal(t, 500, response.Code)
+}

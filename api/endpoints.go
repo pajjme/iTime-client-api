@@ -64,13 +64,15 @@ func Authorize(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
 		return
 	}
 
-	if amqpRes.Code != 0 {
+	switch amqpRes.Code {
+	case 0: // Success
+	case 1:
 		w.WriteHeader(http.StatusUnauthorized)
 		return
+	default:
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-
-
-	// TODO: Use data from amqpResponse to send to client
 
 	http.SetCookie(w, &http.Cookie{
 		Name:    "sessionToken",
