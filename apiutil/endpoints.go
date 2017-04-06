@@ -9,33 +9,77 @@ import (
 	"log"
 )
 
-type authorizeRequest struct {
+type httpAuthorizeRequest struct {
 	AuthCode string `json:"auth_code"`
 }
 
-func Authorize(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
-	authReq := authorizeRequest{}
-	jsonText, _ := ioutil.ReadAll(r.Body)
-	err := json.Unmarshal(jsonText, &authReq)
-	CheckError(err)
+type httpAuthorizeResponse struct {
+	Error string `json:"error,omitempty"`
+}
 
-	log.Println("Send request to US", authReq)
-	rpcRequest, err := json.Marshal(authReq)
-	amqpResponse := <-rpc.SendRequest("authorize", rpcRequest)
+type amqpAuthorizeRequest struct {
+	AuthCode string `json:"auth_code"`
+}
+
+type amqpAuthorizeResponse struct {
+	SessionToken string `json:"session_token"`
+	Error        string `json:"error"`
+	Code         int `json:"code"`
+}
+
+func Authorize(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
+	httpReq := httpAuthorizeRequest{}
+
+	// TODO: Neater error handling?
+	jsonText, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Println(err.Error())
+		return
+	}
+
+	err = json.Unmarshal(jsonText, &httpReq)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Println(err.Error())
+		return
+	}
+
+	amqpReq := amqpAuthorizeRequest{httpReq.AuthCode}
+	strReq, err := json.Marshal(amqpReq)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err.Error())
+		return
+	}
+
+	// TODO: Add a timeout
+	amqpResponse := <-rpc.SendRequest("authorize", strReq)
+
+	amqpRes := amqpAuthorizeResponse{}
+	err = json.Unmarshal(amqpResponse, &amqpRes)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(err.Error())
+		return
+	}
+
+	if amqpRes.Code != 0 {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 
 	// TODO: Use data from amqpResponse to send to client
 
-	w.WriteHeader(200) // HTTP Found
-
 	http.SetCookie(w, &http.Cookie{
 		Name:    "sessionToken",
-		Value:   "",
+		Value:   amqpRes.SessionToken,
 		Expires: time.Now().AddDate(1, 0, 0), // One year ahead
 	})
 
-	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	fmt.Fprintln(w, string(amqpResponse))
+	fmt.Fprint(w, )
 }
 
 func Stats(w http.ResponseWriter, r *http.Request, rpc RPCaller) {
