@@ -1,15 +1,11 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"os"
+	"github.com/pajjme/iTime-client-api/api"
 	"github.com/streadway/amqp"
-	"io/ioutil"
-	"log"
-	"math/rand"
 	"net/http"
-	"time"
+	"log"
 )
 
 const ApiVersion string = "/v1"
@@ -95,6 +91,11 @@ func (qm QueueManager) sendRequest(endpoint string, body []byte) chan []byte {
 	return respondChannel
 }
 
+
+const ApiVersion = "/v1"
+const AmqpUrl = "amqp://guest:guest@localhost:5672/"
+const HttpAddr = ":8118"
+
 func main() {
 	
 	log.Println("Starting the server")
@@ -113,73 +114,23 @@ func main() {
 	defer conn.Close()
 
 	channel, err := conn.Channel()
-	checkError(err)
+	api.CheckError(err)
 	defer channel.Close()
 
-	qm := makeQueueManager(*channel)
+	qm := api.MakeAmqpRPC(*channel)
 
 	// Bind each handler to channel and an endpoint
 	mux := http.NewServeMux()
 
 	// TODO: Make sure AMQP-connection works, ex reconnect
-	mux.HandleFunc(ApiVersion+"/authorize",
-		func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			authorize(w, r, &qm)
-		},
-	)
-	mux.HandleFunc(ApiVersion+"/stats", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		stats(w, r, &qm)
+	mux.HandleFunc(ApiVersion + "/authorize", func(w http.ResponseWriter, r *http.Request) {
+		api.Authorize(w, r, qm)
+	})
+	mux.HandleFunc(ApiVersion + "/stats", func(w http.ResponseWriter, r *http.Request) {
+		api.Stats(w, r, qm)
 	})
 
-	err = http.ListenAndServe(":8118", mux)
-	checkError(err)
-}
-
-type authorizeRequest struct {
-	// Makes it possible to Marshal the struct to json.
-	AuthCode string `json:"auth_code"`
-}
-
-func authorize(w http.ResponseWriter, r *http.Request, qm *QueueManager) {
-	authReq := authorizeRequest{}
-	jsonText, _ := ioutil.ReadAll(r.Body)
-	err := json.Unmarshal(jsonText, &authReq)
-	checkError(err)
-
-
-	
-	log.Println("Send request to US", authReq)
-	rpcRequest, err := json.Marshal(authReq)
-	amqpResponse := <-qm.sendRequest("authorize", rpcRequest)
-	log.Println("Response from US was:",string(amqpResponse))
-	// TODO: Use data from amqpResponse to send to client
-
-	//HTTP Response: Found
-	w.WriteHeader(200)
-
-	http.SetCookie(w, &http.Cookie{
-		Name:    "sessionToken",
-		Value:   "",
-		Expires: time.Now().AddDate(1, 0, 0), // One year ahead
-	})
-
-	fmt.Fprintln(w, string(amqpResponse))
-}
-
-func stats(w http.ResponseWriter, r *http.Request, qm *QueueManager) {
-	println("stttta")
-	params := r.URL.Query()
-	from, ok1 := params["from"]
-	to, ok2 := params["to"]
-
-	if !ok1 || !ok2 {
-		w.WriteHeader(400) // Bad Request
-		return
-	}
-	_, _ = from, to
-
-	// TODO:  send RPC call, and respond on HTTP request
-	fmt.Fprintln(w, "{}")
+	log.Printf("Start listening for HTTP connections at '%s'", HttpAddr)
+	err = http.ListenAndServe(HttpAddr, mux)
+	api.CheckError(err)
 }
