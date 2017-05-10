@@ -1,7 +1,7 @@
 package main
 
 import (
-	"pajjme/client/api"
+	"github.com/pajjme/iTime-client-api/api"
 	"github.com/streadway/amqp"
 	"log"
 	"math/rand"
