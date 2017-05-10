@@ -1,14 +1,14 @@
 package main
 
 import (
-	"os"
-	"github.com/pajjme/iTime-client-api/api"
+	"./api"
 	"github.com/streadway/amqp"
-	"net/http"
 	"log"
+	"math/rand"
+	"net/http"
+	"os"
+	"time"
 )
-
-const ApiVersion string = "/v1"
 
 func checkError(err error) {
 	if err != nil {
@@ -37,7 +37,7 @@ type QueueManager struct {
 	amqpQueue         amqp.Queue
 }
 
-// Makes a QueueManager from a AMQP manager. 
+// Makes a QueueManager from a AMQP manager.
 // Starts a goroutine that redirects responses to corresponding
 // gochannel so it can be used by the goroutines
 func makeQueueManager(amqpChannel amqp.Channel) (qm QueueManager) {
@@ -91,21 +91,22 @@ func (qm QueueManager) sendRequest(endpoint string, body []byte) chan []byte {
 	return respondChannel
 }
 
-
 const ApiVersion = "/v1"
 const AmqpUrl = "amqp://guest:guest@localhost:5672/"
 const HttpAddr = ":8118"
 
 func main() {
-	
+
 	log.Println("Starting the server")
-	
+
 	var err error
 	var conn *amqp.Connection
-	
+
 	for {
-		conn,err = amqp.Dial(os.Getenv("AMQP_URL"))
-		if conn != nil {break}
+		conn, err = amqp.Dial(os.Getenv("AMQP_URL"))
+		if conn != nil {
+			break
+		}
 		log.Println("Cannot connect to rabbitmq. Retrying... ")
 		time.Sleep(5 * time.Second)
 
@@ -123,10 +124,10 @@ func main() {
 	mux := http.NewServeMux()
 
 	// TODO: Make sure AMQP-connection works, ex reconnect
-	mux.HandleFunc(ApiVersion + "/authorize", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(ApiVersion+"/authorize", func(w http.ResponseWriter, r *http.Request) {
 		api.Authorize(w, r, qm)
 	})
-	mux.HandleFunc(ApiVersion + "/stats", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(ApiVersion+"/stats", func(w http.ResponseWriter, r *http.Request) {
 		api.Stats(w, r, qm)
 	})
 
