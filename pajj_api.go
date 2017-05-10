@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"github.com/streadway/amqp"
 	"io/ioutil"
 	"log"
@@ -12,7 +13,6 @@ import (
 )
 
 const ApiVersion string = "/v1"
-const AmqpUrl = "amqp://guest:guest@rabbit-service:5672/"
 
 func checkError(err error) {
 	if err != nil {
@@ -98,9 +98,20 @@ func (qm QueueManager) sendRequest(endpoint string, body []byte) chan []byte {
 func main() {
 	
 	log.Println("Starting the server")
-	conn, err := amqp.Dial(AmqpUrl)
-	checkError(err)
+	
+	var err error
+	var conn *amqp.Connection
+	
+	for {
+		conn,err = amqp.Dial(os.Getenv("AMQP_URL"))
+		if conn != nil {break}
+		log.Println("Cannot connect to rabbitmq. Retrying... ")
+		time.Sleep(5 * time.Second)
+
+	}
+	log.Println("Connected to rabbitmq")
 	defer conn.Close()
+
 	channel, err := conn.Channel()
 	checkError(err)
 	defer channel.Close()
