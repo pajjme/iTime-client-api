@@ -1,7 +1,7 @@
 package main
 
 import (
-	"./api"
+	"pajjme/client/api"
 	"github.com/streadway/amqp"
 	"log"
 	"math/rand"
