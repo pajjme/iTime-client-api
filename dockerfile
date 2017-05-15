@@ -1,10 +1,9 @@
 FROM golang:1.8
-RUN mkdir -p /go/src/app
+RUN mkdir -p /go/src/github.com/pajjme/iTime-client-api/
 
-COPY . /go/src/app
-WORKDIR /go/src/app
+COPY . /go/src/github.com/pajjme/iTime-client-api/
+WORKDIR /go/src/github.com/pajjme/iTime-client-api/
 
-RUN go get -d -v
-RUN go build ./pajj_api.go
-
-CMD ["go","run","pajj_api.go"]
+RUN sh deps.sh
+RUN go build -o app ./pajj_api.go
+CMD ["./app"]
